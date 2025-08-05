@@ -26,7 +26,4 @@ public class TableInfo {
     @Column(name = "country", nullable = false)
     private String country;
 
-    @OneToMany(mappedBy = "tableInfo", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Trend> trends;
-
 }

@@ -3,10 +3,7 @@ package pe.gob.congreso.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import pe.gob.congreso.client.TwitterTrendingClient;
-import pe.gob.congreso.entity.TableInfo;
-import pe.gob.congreso.entity.Trend;
-import pe.gob.congreso.entity.WorldTrend;
-import pe.gob.congreso.entity.WorldTrendsInfo;
+import pe.gob.congreso.entity.*;
 import pe.gob.congreso.repository.TableInfoRepository;
 import pe.gob.congreso.repository.TrendRepository;
 import pe.gob.congreso.repository.WorldTrendRepository;
@@ -14,13 +11,13 @@ import pe.gob.congreso.repository.WorldTrendsInfoRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.transaction.Transactional;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
+
 @Service
 public class TwitterTrendingService {
-
 
     private final TwitterTrendingClient twitterTrendingClient;
     private final TableInfoRepository tableInfoRepository;
@@ -98,7 +95,8 @@ public class TwitterTrendingService {
                         JsonNode trendValues = objectMapper.readTree(trendEntry.getValue().asText());
 
                         Trend trend = new Trend();
-                        trend.setTableInfo(tableInfo);
+                        trend.setTableName(tableName);
+                        trend.setTimestamp(dateTime);
                         trend.setTrendId(trendId);
                         trend.setName(trendValues.get(0).asText());
                         trend.setCount(trendValues.get(1).asInt());
@@ -111,4 +109,27 @@ public class TwitterTrendingService {
             throw new RuntimeException("Error processing and saving trends", e);
         }
     }
+
+    public List<Trend> getTopTrends(LocalDateTime start, LocalDateTime end) {
+        return trendRepository.findTopTrendsByDateRange(start, end);
+    }
+
+    public Map<String, List<HistoricalData>> getHistoricalData(List<String> rawNames, LocalDateTime start, LocalDateTime end) {
+        List<Object[]> results = trendRepository.findHistoricalData(rawNames, start, end);
+        Map<String, List<HistoricalData>> historicalMap = new HashMap<>();
+
+        for (Object[] row : results) {
+            LocalDateTime bucket = ((Timestamp) row[0]).toLocalDateTime();
+            String rawName = (String) row[1];
+            Double avgCount = (Double) row[2];
+            Integer maxCount = (Integer) row[3];
+
+            HistoricalData data = new HistoricalData(bucket, avgCount, maxCount);
+            historicalMap.computeIfAbsent(rawName, k -> new ArrayList<>()).add(data);
+        }
+
+        return historicalMap;
+    }
+
+
 }
