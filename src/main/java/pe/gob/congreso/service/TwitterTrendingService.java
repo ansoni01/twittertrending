@@ -11,8 +11,11 @@ import pe.gob.congreso.repository.WorldTrendsInfoRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.transaction.Transactional;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.*;
 
@@ -115,20 +118,58 @@ public class TwitterTrendingService {
     }
 
     public Map<String, List<HistoricalData>> getHistoricalData(List<String> rawNames, LocalDateTime start, LocalDateTime end) {
-        List<Object[]> results = trendRepository.findHistoricalData(rawNames, start, end);
+        List<Object[]> results = trendRepository.findDailyTrends(rawNames, start, end);
         Map<String, List<HistoricalData>> historicalMap = new HashMap<>();
 
         for (Object[] row : results) {
-            LocalDateTime bucket = ((Timestamp) row[0]).toLocalDateTime();
-            String rawName = (String) row[1];
-            Double avgCount = (Double) row[2];
-            Integer maxCount = (Integer) row[3];
+            try {
+                // 1. Manejar el timestamp (bucket)
+                LocalDateTime bucket = convertToLocalDateTime(row[0]);
 
-            HistoricalData data = new HistoricalData(bucket, avgCount, maxCount);
-            historicalMap.computeIfAbsent(rawName, k -> new ArrayList<>()).add(data);
+                // 2. Obtener el nombre
+                String rawName = (String) row[1];
+
+                // 3. Manejar avg_count (puede ser null, BigDecimal o Double)
+                Double avgCount = convertToDouble(row[2]);
+
+                // 4. Manejar max_count (puede ser null, BigDecimal o Integer)
+                Integer maxCount = convertToInteger(row[3]);
+
+                // 5. Crear y agregar el dato histórico
+                HistoricalData data = new HistoricalData(bucket, avgCount, maxCount);
+                historicalMap.computeIfAbsent(rawName, k -> new ArrayList<>()).add(data);
+            } catch (Exception e) {
+                // Loggear el error pero continuar procesando los demás registros
+                System.err.println("Error procesando fila: " + Arrays.toString(row) + " - " + e.getMessage());
+            }
         }
 
         return historicalMap;
+    }
+
+    // Métodos auxiliares para conversión segura
+    private LocalDateTime convertToLocalDateTime(Object date) {
+        if (date == null) return null;
+        if (date instanceof Timestamp) return ((Timestamp) date).toLocalDateTime();
+        if (date instanceof Instant) return LocalDateTime.ofInstant((Instant) date, ZoneId.systemDefault());
+        if (date instanceof java.util.Date) return ((java.util.Date) date).toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        throw new IllegalArgumentException("Tipo de fecha no soportado: " + date.getClass());
+    }
+
+    private Double convertToDouble(Object number) {
+        if (number == null) return null;
+        if (number instanceof BigDecimal) return ((BigDecimal) number).doubleValue();
+        if (number instanceof Double) return (Double) number;
+        if (number instanceof Integer) return ((Integer) number).doubleValue();
+        throw new IllegalArgumentException("Tipo numérico no soportado para conversión a Double: " + number.getClass());
+    }
+
+    private Integer convertToInteger(Object number) {
+        if (number == null) return null;
+        if (number instanceof BigDecimal) return ((BigDecimal) number).intValue();
+        if (number instanceof Integer) return (Integer) number;
+        if (number instanceof Double) return ((Double) number).intValue();
+        throw new IllegalArgumentException("Tipo numérico no soportado para conversión a Integer: " + number.getClass());
     }
 
 

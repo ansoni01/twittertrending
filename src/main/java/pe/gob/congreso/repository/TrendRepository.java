@@ -25,6 +25,21 @@ public interface TrendRepository extends JpaRepository<Trend, Long> {
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
 
+    @Query(value = "SELECT time_bucket_gapfill('1 day', timestamp) as bucket_day, " +
+            "raw_name, " +
+            "MAX(count) as pico_maximo_diario, " +
+            "MAX(count) as promedio_diario " +
+            "FROM trends " +
+            "WHERE raw_name IN :rawNames " +
+            "AND timestamp BETWEEN :startDate AND :endDate " +
+            "GROUP BY bucket_day, raw_name " +
+            "ORDER BY bucket_day ASC",
+            nativeQuery = true)
+    List<Object[]> findDailyTrends(
+            @Param("rawNames") List<String> rawNames,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
     @Query(value = "SELECT t.* FROM ( " +
             "SELECT raw_name, MAX(count) as max_count " +
             "FROM trends " +

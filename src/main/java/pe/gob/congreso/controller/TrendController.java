@@ -28,8 +28,8 @@ public class TrendController {
 
     @PostMapping("/historical")
     public ResponseEntity<Map<String, List<HistoricalData>>> getHistoricalData(
-            @RequestParam("start") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam("end") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            @RequestParam("start") @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss.SSS Z") LocalDateTime start,
+            @RequestParam("end") @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss.SSS Z") LocalDateTime end,
             @RequestBody List<String> trendIds) {
         return ResponseEntity.ok(trendService.getHistoricalData(trendIds, start, end));
     }
