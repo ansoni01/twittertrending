@@ -66,17 +66,20 @@ public interface TrendRepository extends JpaRepository<Trend, Long> {
     @Query(value = "SELECT DISTINCT " +
             "t.raw_name as rawName, " +
             "t.name as displayName, " +
-            "SUM(t.count) as totalMentions, " +
+            "MAX(t.count) as totalMentions, " +
             "MIN(t.timestamp) as firstSeen, " +
             "MAX(t.timestamp) as lastSeen " +
             "FROM trends t " +
-            "WHERE LOWER(t.name) LIKE LOWER(CONCAT('%', :query, '%')) " +
-            "   OR LOWER(t.raw_name) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "WHERE (LOWER(t.name) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "   OR LOWER(t.raw_name) LIKE LOWER(CONCAT('%', :query, '%'))) " +
+            "AND t.timestamp BETWEEN :startDate AND :endDate " +
             "GROUP BY t.raw_name, t.name " +
             "ORDER BY totalMentions DESC " +
             "LIMIT :limit", nativeQuery = true)
     List<TrendSearchProjection> searchTrendsByName(
             @Param("query") String query,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
             @Param("limit") int limit);
 
     // Alternativa usando JPQL (más segura)
@@ -137,6 +140,46 @@ public interface TrendRepository extends JpaRepository<Trend, Long> {
             "ORDER BY date", nativeQuery = true)
     List<Object[]> getTrendDailyStatsNative(
             @Param("rawName") String rawName,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = "WITH daily_stats AS ( " +
+            "  SELECT " +
+            "    raw_name, " +  // Agregar raw_name
+            "    DATE(timestamp) AS date, " +
+            "    SUM(count) AS total_count, " +
+            "    MAX(count) AS peak_count, " +
+            "    MODE() WITHIN GROUP (ORDER BY EXTRACT(HOUR FROM timestamp)) AS peak_hour " +
+            "  FROM trends " +
+            "  WHERE raw_name IN :rawNames " +
+            "    AND timestamp BETWEEN :startDate AND :endDate " +
+            "  GROUP BY raw_name, DATE(timestamp) " +  // Agregar raw_name al GROUP BY
+            "), " +
+            "daily_growth AS ( " +
+            "  SELECT *, " +
+            "    CASE " +
+            "      WHEN LAG(total_count) OVER (PARTITION BY raw_name ORDER BY date) IS NOT NULL " +
+            "       AND LAG(total_count) OVER (PARTITION BY raw_name ORDER BY date) > 0 " +
+            "      THEN ((total_count - LAG(total_count) OVER (PARTITION BY raw_name ORDER BY date))::DECIMAL / " +
+            "            LAG(total_count) OVER (PARTITION BY raw_name ORDER BY date)) * 100 " +
+            "      ELSE 0 " +
+            "    END AS growth_rate " +
+            "  FROM daily_stats " +
+            ") " +
+            "SELECT raw_name, date, total_count, peak_hour, peak_count, growth_rate " +  // Agregar raw_name
+            "FROM daily_growth " +
+            "ORDER BY raw_name, date", nativeQuery = true)
+    List<Object[]> getGroupDailyStatsNative(
+            @Param("rawNames") List<String> rawNames,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT t FROM Trend t " +
+            "WHERE t.rawName IN :rawNames " +
+            "AND t.timestamp BETWEEN :startDate AND :endDate " +
+            "ORDER BY t.timestamp, t.rawName")
+    List<Trend> findTrendsByNamesAndDateRange(
+            @Param("rawNames") List<String> rawNames,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
 }

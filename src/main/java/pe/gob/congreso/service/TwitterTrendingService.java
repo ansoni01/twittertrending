@@ -186,10 +186,14 @@ public class TwitterTrendingService {
 
 
 
-    public List<TrendSearchResult> searchTrendsByName(String query, int limit) {
+    public List<TrendSearchResult> searchTrendsByName(String query, int limit, LocalDateTime startDate, LocalDateTime endDate) {
         try {
+            LocalDateTime actualStartDate = startDate != null ?
+                    startDate : LocalDateTime.now().minusDays(30);
+            LocalDateTime actualEndDate = endDate != null ?
+                    endDate : LocalDateTime.now();
             // Opción 1: Usar la proyección (más eficiente)
-            List<TrendSearchProjection> projections = trendRepository.searchTrendsByName(query, limit);
+            List<TrendSearchProjection> projections = trendRepository.searchTrendsByName(query, actualStartDate, actualEndDate, limit);
 
             return projections.stream()
                     .map(projection -> new TrendSearchResult(
@@ -265,42 +269,54 @@ public class TwitterTrendingService {
 
     // Nuevo: Comparar dos trends
     public TrendComparisonResult compareTrends(TrendComparisonRequest request) {
-        // Si no se especifican fechas, usar últimos 30 días
         LocalDateTime endDate = request.getEndDate() != null ?
                 request.getEndDate() : LocalDateTime.now();
         LocalDateTime startDate = request.getStartDate() != null ?
                 request.getStartDate() : endDate.minusDays(30);
 
-        // Obtener datos para ambos trends
-        List<TrendDailyData> trend1Data = getTrendDailyData(request.getTrendName1(), startDate, endDate);
-        List<TrendDailyData> trend2Data = getTrendDailyData(request.getTrendName2(), startDate, endDate);
+        List<TrendDailyData> trend1Data = getGroupDailyData(request.getTrendNames1(), startDate, endDate);
+        List<TrendDailyData> trend2Data = getGroupDailyData(request.getTrendNames2(), startDate, endDate);
 
-        // Calcular resumen estadístico
         TrendComparisonSummary summary = calculateComparisonSummary(trend1Data, trend2Data);
 
         return new TrendComparisonResult(
-                request.getTrendName1(),
-                request.getTrendName2(),
+                String.join(", ", request.getTrendNames1()),
+                String.join(", ", request.getTrendNames2()),
                 trend1Data,
                 trend2Data,
                 summary
         );
     }
 
-    // Obtener datos diarios de un trend
-    private List<TrendDailyData> getTrendDailyData(String rawName, LocalDateTime startDate, LocalDateTime endDate) {
-        List<Object[]> results = trendRepository.getTrendDailyStatsNative(rawName, startDate, endDate);
+    private List<TrendDailyData> getGroupDailyData(List<String> rawNames, LocalDateTime startDate, LocalDateTime endDate) {
+        List<Object[]> results = trendRepository.getGroupDailyStatsNative(rawNames, startDate, endDate);
 
         return results.stream()
                 .map(row -> new TrendDailyData(
-                        ((java.sql.Date) row[0]).toLocalDate(),
-                        ((Number) row[1]).longValue(), // total_count
-                        ((Number) row[2]).intValue(),  // peak_hour
-                        ((Number) row[3]).longValue(), // peak_count
-                        ((Number) row[4]).doubleValue() // growth_rate
+                        (String) row[0],
+                        ((java.sql.Date) row[1]).toLocalDate(),
+                        ((Number) row[2]).longValue(),
+                        ((Number) row[3]).intValue(),
+                        ((Number) row[4]).longValue(),
+                        ((Number) row[5]).doubleValue()
                 ))
                 .collect(Collectors.toList());
     }
+
+    // Obtener datos diarios de un trend
+//    private List<TrendDailyData> getTrendDailyData(String rawName, LocalDateTime startDate, LocalDateTime endDate) {
+//        List<Object[]> results = trendRepository.getTrendDailyStatsNative(rawName, startDate, endDate);
+//
+//        return results.stream()
+//                .map(row -> new TrendDailyData(
+//                        ((java.sql.Date) row[0]).toLocalDate(),
+//                        ((Number) row[1]).longValue(), // total_count
+//                        ((Number) row[2]).intValue(),  // peak_hour
+//                        ((Number) row[3]).longValue(), // peak_count
+//                        ((Number) row[4]).doubleValue() // growth_rate
+//                ))
+//                .collect(Collectors.toList());
+//    }
 
     // Calcular resumen estadístico de la comparación
     private TrendComparisonSummary calculateComparisonSummary(List<TrendDailyData> trend1Data,
@@ -436,6 +452,91 @@ public class TwitterTrendingService {
         result.setConfidenceScore(0.6);
 
         return result;
+    }
+
+    public TrendDailyComparisonResult compareTrendsForDaily(TrendComparisonRequest request) {
+        LocalDateTime endDate = request.getEndDate() != null ?
+                request.getEndDate() : LocalDateTime.now();
+        LocalDateTime startDate = request.getStartDate() != null ?
+                request.getStartDate() : endDate.minusDays(30);
+
+        // Obtener todos los registros para ambos grupos
+        List<Trend> trends1 = getTrendsByNames(request.getTrendNames1(), startDate, endDate);
+        List<Trend> trends2 = getTrendsByNames(request.getTrendNames2(), startDate, endDate);
+
+        // Convertir a DTOs diarios
+        List<TrendDailyDetail> trend1Details = convertToDailyDetails(trends1);
+        List<TrendDailyDetail> trend2Details = convertToDailyDetails(trends2);
+
+        // Calcular estadísticas de comparación
+        TrendComparisonSummary summary = calculateDailyComparisonSummary(trend1Details, trend2Details);
+
+        return new TrendDailyComparisonResult(
+                String.join(", ", request.getTrendNames1()),
+                String.join(", ", request.getTrendNames2()),
+                trend1Details,
+                trend2Details,
+                summary
+        );
+    }
+
+    private List<Trend> getTrendsByNames(List<String> rawNames, LocalDateTime startDate, LocalDateTime endDate) {
+        if (rawNames == null || rawNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return trendRepository.findTrendsByNamesAndDateRange(rawNames, startDate, endDate);
+    }
+
+    private List<TrendDailyDetail> convertToDailyDetails(List<Trend> trends) {
+        return trends.stream()
+                .map(trend -> {
+                    TrendDailyDetail detail = new TrendDailyDetail();
+                    detail.setDate(trend.getTimestamp().toLocalDate());
+                    detail.setRawName(trend.getRawName());
+                    detail.setDisplayName(trend.getName());
+                    detail.setCount(trend.getCount());
+                    detail.setTimestamp(trend.getTimestamp());
+                    detail.setTrendId(trend.getTrendId());
+                    detail.setTableName(trend.getTableName());
+                    return detail;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private TrendComparisonSummary calculateDailyComparisonSummary(
+            List<TrendDailyDetail> trend1Details,
+            List<TrendDailyDetail> trend2Details) {
+
+        TrendComparisonSummary summary = new TrendComparisonSummary();
+
+        // Estadísticas del trend 1
+        long totalMentions1 = trend1Details.stream().mapToInt(TrendDailyDetail::getCount).sum();
+        Optional<Integer> peakValue1Opt = trend1Details.stream().map(TrendDailyDetail::getCount).max(Integer::compare);
+        Optional<TrendDailyDetail> peakDay1 = trend1Details.stream()
+                .max(Comparator.comparingInt(TrendDailyDetail::getCount));
+        int activeDays1 = (int) trend1Details.stream()
+                .collect(Collectors.groupingBy(TrendDailyDetail::getDate))
+                .size();
+
+        // Estadísticas del trend 2
+        long totalMentions2 = trend2Details.stream().mapToInt(TrendDailyDetail::getCount).sum();
+        Optional<Integer> peakValue2Opt = trend2Details.stream().map(TrendDailyDetail::getCount).max(Integer::compare);
+        Optional<TrendDailyDetail> peakDay2 = trend2Details.stream()
+                .max(Comparator.comparingInt(TrendDailyDetail::getCount));
+        int activeDays2 = (int) trend2Details.stream()
+                .collect(Collectors.groupingBy(TrendDailyDetail::getDate))
+                .size();
+
+        summary.setTotalMentions1(totalMentions1);
+        summary.setTotalMentions2(totalMentions2);
+        summary.setPeakDate1(peakDay1.map(TrendDailyDetail::getDate).orElse(null));
+        summary.setPeakDate2(peakDay2.map(TrendDailyDetail::getDate).orElse(null));
+        summary.setPeakValue1(peakValue1Opt.orElse(0));
+        summary.setPeakValue2(peakValue2Opt.orElse(0));
+        summary.setActiveDays1(activeDays1);
+        summary.setActiveDays2(activeDays2);
+
+        return summary;
     }
 
 }

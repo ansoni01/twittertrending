@@ -2,7 +2,7 @@ package pe.gob.congreso.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import okhttp3.*;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import pe.gob.congreso.dto.OpenAIMessage;
@@ -14,7 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 
-@Service
+
 public class GptService {
 
     @Value("${openai.api.key}")

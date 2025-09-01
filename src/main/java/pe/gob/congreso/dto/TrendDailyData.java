@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 public class TrendDailyData {
-
+    private String rawName;
     private LocalDate date;
     private long totalCount;
     private int peakHour;
@@ -14,12 +14,21 @@ public class TrendDailyData {
     public TrendDailyData() {
     }
 
-    public TrendDailyData(LocalDate date, long totalCount, int peakHour, long peakCount, double growthRate) {
+    public TrendDailyData(String rawName, LocalDate date, long totalCount, int peakHour, long peakCount, double growthRate) {
+        this.rawName = rawName;
         this.date = date;
         this.totalCount = totalCount;
         this.peakHour = peakHour;
         this.peakCount = peakCount;
         this.growthRate = growthRate;
+    }
+
+    public String getRawName() {
+        return rawName;
+    }
+
+    public void setRawName(String rawName) {
+        this.rawName = rawName;
     }
 
     public LocalDate getDate() {

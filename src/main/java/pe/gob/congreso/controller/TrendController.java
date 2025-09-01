@@ -39,8 +39,10 @@ public class TrendController {
     @GetMapping("/search")
     public ResponseEntity<List<TrendSearchResult>> searchTrends(
             @RequestParam("query") String query,
-            @RequestParam(value = "limit", defaultValue = "20") int limit) {
-        return ResponseEntity.ok(trendService.searchTrendsByName(query, limit));
+            @RequestParam(value = "limit", defaultValue = "20") int limit,
+            @RequestParam(value = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(value = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+        return ResponseEntity.ok(trendService.searchTrendsByName(query, limit, startDate, endDate));
     }
 
     @PostMapping("/compare")
@@ -54,5 +56,11 @@ public class TrendController {
     public ResponseEntity<TrendAnalysisResult> analyzeTrendComparison(
             @RequestBody TrendComparisonData comparisonData) {
         return ResponseEntity.ok(trendService.analyzeTrendComparison(comparisonData));
+    }
+
+    @PostMapping("/compare-for-daily")
+    public ResponseEntity<TrendDailyComparisonResult> compareTrendsForDaily(
+            @RequestBody TrendComparisonRequest request) {
+        return ResponseEntity.ok(trendService.compareTrendsForDaily(request));
     }
 }
