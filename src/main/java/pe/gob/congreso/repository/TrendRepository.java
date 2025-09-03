@@ -49,11 +49,11 @@ public interface TrendRepository extends JpaRepository<Trend, Long> {
             "WHERE timestamp BETWEEN :startDate AND :endDate " +
             "GROUP BY raw_name " +
             "ORDER BY max_count DESC " +
-            "LIMIT 300" +
+            "LIMIT 5000" +
             ") AS top_trends " +
             "JOIN LATERAL ( " +
             "SELECT * FROM trends " +
-            "WHERE raw_name = top_trends.raw_name AND count = top_trends.max_count " +
+            "WHERE raw_name = top_trends.raw_name AND count = top_trends.max_count AND timestamp BETWEEN :startDate AND :endDate " +
             "ORDER BY timestamp DESC " +
             "LIMIT 1" +
             ") t ON true " +
